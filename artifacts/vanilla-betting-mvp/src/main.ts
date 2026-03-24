@@ -1,0 +1,183 @@
+import { halfKelly } from "./kelly";
+import { loadBets, saveBet, clearBets } from "./storage";
+import type { BetInputs, KellyResult, SavedBet } from "./types";
+
+// ── DOM refs ───────────────────────────────────────────────────────────────────
+
+const bankrollEl   = document.getElementById("bankroll")      as HTMLInputElement;
+const winProbEl    = document.getElementById("winProb")       as HTMLInputElement;
+const oddsEl       = document.getElementById("odds")          as HTMLInputElement;
+const betNameEl    = document.getElementById("betName")       as HTMLInputElement;
+const calcBtn      = document.getElementById("calcBtn")       as HTMLButtonElement;
+const saveBtn      = document.getElementById("saveBtn")       as HTMLButtonElement;
+const clearBtn     = document.getElementById("clearBtn")      as HTMLButtonElement;
+const errorMsg     = document.getElementById("errorMsg")      as HTMLParagraphElement;
+const resultBox    = document.getElementById("result")        as HTMLDivElement;
+const resultAmount = document.getElementById("resultAmount")  as HTMLParagraphElement;
+const resultFrac   = document.getElementById("resultFraction")as HTMLParagraphElement;
+const historyList  = document.getElementById("historyList")   as HTMLUListElement;
+const emptyMsg     = document.getElementById("emptyMsg")      as HTMLParagraphElement;
+
+// ── State ──────────────────────────────────────────────────────────────────────
+
+let lastResult: KellyResult | null = null;
+let lastInputs: BetInputs  | null = null;
+
+// ── Validation ─────────────────────────────────────────────────────────────────
+
+function validate(): BetInputs | null {
+  const bankroll       = parseFloat(bankrollEl.value);
+  const winProbability = parseFloat(winProbEl.value);
+  const decimalOdds    = parseFloat(oddsEl.value);
+  const label          = betNameEl.value.trim() || undefined;
+
+  if (!isFinite(bankroll) || bankroll <= 0) {
+    showError("Bankroll must be a positive number.");
+    return null;
+  }
+  if (!isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
+    showError("Win probability must be between 0 and 1 (exclusive).");
+    return null;
+  }
+  if (!isFinite(decimalOdds) || decimalOdds <= 1) {
+    showError("Decimal odds must be greater than 1.");
+    return null;
+  }
+
+  clearError();
+  return { bankroll, winProbability, decimalOdds, label };
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+
+function showError(msg: string): void {
+  errorMsg.textContent = msg;
+  errorMsg.classList.remove("hidden");
+  resultBox.classList.add("hidden");
+}
+
+function clearError(): void {
+  errorMsg.textContent = "";
+  errorMsg.classList.add("hidden");
+}
+
+function fmt$(n: number): string {
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+}
+
+function fmtPct(n: number): string {
+  return (n * 100).toFixed(2) + "%";
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// ── Calculate ──────────────────────────────────────────────────────────────────
+
+function calculate(): void {
+  const inputs = validate();
+  if (!inputs) return;
+
+  const result = halfKelly(inputs);
+  lastResult   = result;
+  lastInputs   = inputs;
+
+  if (result.halfKellyFraction <= 0) {
+    showError("No edge detected — Half-Kelly recommends not betting.");
+    return;
+  }
+
+  resultAmount.textContent = fmt$(result.recommendedBetAmount);
+  resultFrac.textContent   =
+    `Half-Kelly: ${fmtPct(result.halfKellyFraction)} of bankroll` +
+    `  ·  Full Kelly: ${fmtPct(result.fullKellyFraction)}`;
+  resultBox.classList.remove("hidden");
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────────
+
+function save(): void {
+  if (!lastResult || !lastInputs) {
+    showError("Calculate a bet before saving.");
+    return;
+  }
+  const bet: SavedBet = {
+    id:      crypto.randomUUID(),
+    savedAt: new Date().toISOString(),
+    ...lastInputs,
+    result:  lastResult,
+  };
+  saveBet(bet);
+  renderHistory();
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+
+function renderHistory(): void {
+  const bets = loadBets();
+  historyList.innerHTML = "";
+
+  if (bets.length === 0) {
+    emptyMsg.classList.remove("hidden");
+    return;
+  }
+
+  emptyMsg.classList.add("hidden");
+
+  for (const bet of bets) {
+    const li   = document.createElement("li");
+    li.className =
+      "rounded-xl bg-gray-900 border border-gray-800 px-4 py-3 " +
+      "flex items-start justify-between gap-4";
+
+    const date  = new Date(bet.savedAt).toLocaleString();
+    const label = bet.label ?? "Unnamed bet";
+
+    li.innerHTML = `
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-white truncate">${escapeHtml(label)}</p>
+        <p class="text-xs text-gray-400 mt-0.5">${date}</p>
+        <p class="text-xs text-gray-500 mt-1">
+          Bankroll: ${fmt$(bet.bankroll)} · p=${bet.winProbability} · odds=${bet.decimalOdds}
+        </p>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-sm font-bold text-indigo-300">${fmt$(bet.result.recommendedBetAmount)}</p>
+        <p class="text-xs text-gray-500">${fmtPct(bet.result.halfKellyFraction)}</p>
+      </div>
+    `;
+
+    historyList.appendChild(li);
+  }
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────────
+
+calcBtn.addEventListener("click", calculate);
+saveBtn.addEventListener("click", save);
+clearBtn.addEventListener("click", () => {
+  clearBets();
+  lastResult = null;
+  lastInputs = null;
+  renderHistory();
+});
+
+[bankrollEl, winProbEl, oddsEl, betNameEl].forEach((el) => {
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") calculate();
+  });
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+renderHistory();

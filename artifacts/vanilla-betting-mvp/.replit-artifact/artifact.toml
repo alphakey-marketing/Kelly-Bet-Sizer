@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/vanilla-betting-mvp/"
+title = "Kelly Bet Sizer"
+version = "1.0.0"
+id = "artifacts/vanilla-betting-mvp"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/vanilla-betting-mvp/" ]
+localPort = 24951
+
+[services.development]
+run = "pnpm --filter @workspace/vanilla-betting-mvp run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vanilla-betting-mvp", "run", "build" ]
+publicDir = "artifacts/vanilla-betting-mvp/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24951"
+BASE_PATH = "/vanilla-betting-mvp/"
