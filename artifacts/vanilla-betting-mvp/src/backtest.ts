@@ -73,10 +73,23 @@ function emptyResult(
 export function runBacktest(rows: BacktestRow[], config: BacktestConfig): BacktestResult {
   const { startingBankroll, betSide, kellyFraction, minEdge, minStakeAmount } = config;
 
+  // ── Fix 3: Normalise date filter strings for reliable string comparison ────
+  /** Normalise a date string to YYYY-MM-DD. Accepts YYYY-MM-DD (passthrough)
+   *  and DD/MM/YYYY. Returns null if the format is unrecognised. */
+  function normDateFilter(raw: string): string | null {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+
+  const normFrom = config.dateFrom ? normDateFilter(config.dateFrom) : null;
+  const normTo   = config.dateTo   ? normDateFilter(config.dateTo)   : null;
+
   // ── Issue 6: Date-range filter ──────────────────────────────────────────────
   const filteredRows = rows.filter((r) => {
-    if (config.dateFrom && r.date < config.dateFrom) return false;
-    if (config.dateTo   && r.date > config.dateTo)   return false;
+    if (normFrom && r.date < normFrom) return false;
+    if (normTo   && r.date > normTo)   return false;
     return true;
   });
 
@@ -177,8 +190,14 @@ export function runBacktest(rows: BacktestRow[], config: BacktestConfig): Backte
       edge:     chosen.edge,
       stake:    actualStake,
       pnl,
-      bankroll,
+      bankroll: Math.max(0, bankroll),
     });
+
+    // ── Fix 1: Ruin guard — halt simulation when bankroll is exhausted ───────
+    if (bankroll <= 0) {
+      bankroll = 0;
+      break;
+    }
   }
 
   const betsPlaced = wins + losses;
@@ -202,6 +221,11 @@ export function runBacktest(rows: BacktestRow[], config: BacktestConfig): Backte
     robustnessFlags.push(`Win rate too low: ${(winRate * 100).toFixed(0)}% (need 30%)`);
   }
 
+  // ── Fix 2: Provide a skipReason when hasPinnacleOdds=true but 0 bets placed ─
+  const noBetsSkipReason = betsPlaced === 0
+    ? "No bets placed. All rows were skipped due to edge/stake filters or missing Pinnacle odds on individual rows."
+    : undefined;
+
   return {
     trades,
     betsPlaced,
@@ -216,6 +240,7 @@ export function runBacktest(rows: BacktestRow[], config: BacktestConfig): Backte
     startingBankroll,
     avgEdge,
     hasPinnacleOdds:  true,
+    ...(noBetsSkipReason ? { skipReason: noBetsSkipReason } : {}),
     robustnessFlags,
   };
 }

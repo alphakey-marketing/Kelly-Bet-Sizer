@@ -172,7 +172,15 @@ export function initBacktest(): void {
       return;
     }
 
-    const betSide         = ($("btBetSide")   as HTMLSelectElement).value as BacktestConfig["betSide"];
+    // ── Fix 4: Validate betSide at runtime ─────────────────────────────────
+    const betSideRaw = ($("btBetSide") as HTMLSelectElement).value;
+    const VALID_SIDES = ["home", "draw", "away", "best"] as const;
+    if (!VALID_SIDES.includes(betSideRaw as BacktestConfig["betSide"])) {
+      showError(`Unknown bet side "${betSideRaw}". Expected: home, draw, away, or best.`);
+      return;
+    }
+    const betSide = betSideRaw as BacktestConfig["betSide"];
+
     const kellyFraction   = parseFloat(($("btKellyFrac") as HTMLSelectElement).value);
     const minEdgeRaw      = parseFloat(($("btMinEdge")   as HTMLInputElement).value);
     const minEdge         = isFinite(minEdgeRaw) ? minEdgeRaw / 100 : 0;
@@ -193,46 +201,63 @@ export function initBacktest(): void {
       ...(dateToRaw   ? { dateTo:   dateToRaw   } : {}),
     };
 
+    // ── Fix 5: Show loading state before blocking synchronous work ──────────
+    runBtn.disabled = true;
+    runBtn.textContent = "Running…";
+
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const { rows, errors } = parseCsv(text);
+      // Yield to the browser event loop so the "Running…" button state can
+      // repaint before the synchronous parseCsv + runBacktest work begins.
+      setTimeout(() => {
+        try {
+          const text = e.target?.result as string;
+          const { rows, errors } = parseCsv(text);
 
-      if (rows.length === 0) {
-        showError(
-          errors.length > 0
-            ? `CSV parse failed: ${errors[0]}`
-            : "No valid rows found in the CSV file."
-        );
-        return;
-      }
+          if (rows.length === 0) {
+            showError(
+              errors.length > 0
+                ? `CSV parse failed: ${errors[0]}`
+                : "No valid rows found in the CSV file."
+            );
+            return;
+          }
 
-      if (errors.length > 0) {
-        console.warn("CSV parse warnings:", errors);
-      }
+          if (errors.length > 0) {
+            console.warn("CSV parse warnings:", errors);
+          }
 
-      const result = runBacktest(rows, config);
+          const result = runBacktest(rows, config);
 
-      // ── Issue 1: No Pinnacle odds warning ─────────────────────────────────
-      if (!result.hasPinnacleOdds) {
-        showError(result.skipReason ?? "No Pinnacle odds found in CSV.");
-        return;
-      }
+          // ── Issue 1: No Pinnacle odds warning ───────────────────────────
+          if (!result.hasPinnacleOdds) {
+            showError(result.skipReason ?? "No Pinnacle odds found in CSV.");
+            return;
+          }
 
-      if (result.betsPlaced === 0) {
-        showError(
-          result.skipReason ??
-          `No bets were placed with min edge ${(minEdge * 100).toFixed(1)}% and min stake HKD ${minStakeAmount}. ` +
-          `Try lowering the Min Edge threshold or Min Stake.`
-        );
-        return;
-      }
+          if (result.betsPlaced === 0) {
+            showError(
+              result.skipReason ??
+              `No bets were placed with min edge ${(minEdge * 100).toFixed(1)}% and min stake HKD ${minStakeAmount}. ` +
+              `Try lowering the Min Edge threshold or Min Stake.`
+            );
+            return;
+          }
 
-      renderResults(result);
+          renderResults(result);
+        } finally {
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Backtest";
+        }
+      }, 0);
     };
 
-    reader.onerror = () => showError("Failed to read the CSV file.");
+    reader.onerror = () => {
+      showError("Failed to read the CSV file.");
+      runBtn.disabled = false;
+      runBtn.textContent = "Run Backtest";
+    };
     reader.readAsText(file);
   });
 }

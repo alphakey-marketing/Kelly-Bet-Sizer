@@ -7,7 +7,7 @@ import type { BacktestRow } from "./types";
 // Each entry lists acceptable aliases in priority order.
 
 const COL = {
-  date:   ["Date"],
+  date:   ["Date", "Match Date"],
   home:   ["HomeTeam", "Home Team", "HT"],
   away:   ["AwayTeam", "Away Team", "AT"],
   result: ["FTR", "Res"],
