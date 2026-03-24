@@ -4,19 +4,19 @@ import type { BetInputs, KellyResult, SavedBet } from "./types";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 
-const bankrollEl   = document.getElementById("bankroll")      as HTMLInputElement;
-const winProbEl    = document.getElementById("winProb")       as HTMLInputElement;
-const oddsEl       = document.getElementById("odds")          as HTMLInputElement;
-const betNameEl    = document.getElementById("betName")       as HTMLInputElement;
-const calcBtn      = document.getElementById("calcBtn")       as HTMLButtonElement;
-const saveBtn      = document.getElementById("saveBtn")       as HTMLButtonElement;
-const clearBtn     = document.getElementById("clearBtn")      as HTMLButtonElement;
-const errorMsg     = document.getElementById("errorMsg")      as HTMLParagraphElement;
-const resultBox    = document.getElementById("result")        as HTMLDivElement;
-const resultAmount = document.getElementById("resultAmount")  as HTMLParagraphElement;
-const resultFrac   = document.getElementById("resultFraction")as HTMLParagraphElement;
-const historyList  = document.getElementById("historyList")   as HTMLUListElement;
-const emptyMsg     = document.getElementById("emptyMsg")      as HTMLParagraphElement;
+const bankrollEl   = document.getElementById("bankroll")       as HTMLInputElement;
+const winProbEl    = document.getElementById("winProb")        as HTMLInputElement;
+const oddsEl       = document.getElementById("odds")           as HTMLInputElement;
+const betNameEl    = document.getElementById("betName")        as HTMLInputElement;
+const calcBtn      = document.getElementById("calcBtn")        as HTMLButtonElement;
+const saveBtn      = document.getElementById("saveBtn")        as HTMLButtonElement;
+const clearBtn     = document.getElementById("clearBtn")       as HTMLButtonElement;
+const errorMsg     = document.getElementById("errorMsg")       as HTMLParagraphElement;
+const resultBox    = document.getElementById("result")         as HTMLDivElement;
+const resultAmount = document.getElementById("resultAmount")   as HTMLParagraphElement;
+const resultFrac   = document.getElementById("resultFraction") as HTMLParagraphElement;
+const historyList  = document.getElementById("historyList")    as HTMLUListElement;
+const emptyMsg     = document.getElementById("emptyMsg")       as HTMLParagraphElement;
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,8 @@ let lastInputs: BetInputs  | null = null;
 
 function validate(): BetInputs | null {
   const bankroll       = parseFloat(bankrollEl.value);
-  const winProbability = parseFloat(winProbEl.value);
+  // FIX 2a: user enters 0–100 (%), divide by 100 to get decimal for Kelly
+  const winProbability = parseFloat(winProbEl.value) / 100;
   const decimalOdds    = parseFloat(oddsEl.value);
   const label          = betNameEl.value.trim() || undefined;
 
@@ -35,8 +36,9 @@ function validate(): BetInputs | null {
     showError("Bankroll must be a positive number.");
     return null;
   }
-  if (!isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
-    showError("Win probability must be between 0 and 1 (exclusive).");
+  // FIX 2b: validate against 0–100 range, not 0–1
+  if (!isFinite(parseFloat(winProbEl.value)) || parseFloat(winProbEl.value) <= 0 || parseFloat(winProbEl.value) >= 100) {
+    showError("Win probability must be between 0 and 100 (e.g. enter 60 for 60%).");
     return null;
   }
   if (!isFinite(decimalOdds) || decimalOdds <= 1) {
@@ -61,10 +63,10 @@ function clearError(): void {
   errorMsg.classList.add("hidden");
 }
 
+// FIX 2c: Changed from USD to HKD
 function fmt$(n: number): string {
-  return n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
+  return "HKD " + n.toLocaleString("en-HK", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
@@ -135,7 +137,7 @@ function renderHistory(): void {
   emptyMsg.classList.add("hidden");
 
   for (const bet of bets) {
-    const li   = document.createElement("li");
+    const li = document.createElement("li");
     li.className =
       "rounded-xl bg-gray-900 border border-gray-800 px-4 py-3 " +
       "flex items-start justify-between gap-4";
@@ -143,12 +145,13 @@ function renderHistory(): void {
     const date  = new Date(bet.savedAt).toLocaleString();
     const label = bet.label ?? "Unnamed bet";
 
+    // FIX 2d: display winProbability as % (multiply back by 100 for readability)
     li.innerHTML = `
       <div class="min-w-0">
         <p class="text-sm font-medium text-white truncate">${escapeHtml(label)}</p>
         <p class="text-xs text-gray-400 mt-0.5">${date}</p>
         <p class="text-xs text-gray-500 mt-1">
-          Bankroll: ${fmt$(bet.bankroll)} · p=${bet.winProbability} · odds=${bet.decimalOdds}
+          Bankroll: ${fmt$(bet.bankroll)} · p=${(bet.winProbability * 100).toFixed(1)}% · odds=${bet.decimalOdds}
         </p>
       </div>
       <div class="text-right shrink-0">
