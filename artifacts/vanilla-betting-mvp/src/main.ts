@@ -2,13 +2,12 @@
 
 import { halfKelly } from "./kelly";
 import {
-  loadBets,
-  saveBet,
-  clearBets,
-  resolveBet,
-  loadBankroll,
-  resetBankroll,
+  loadBets, saveBet, clearBets,
+  resolveBet, loadBankroll, resetBankroll,
 } from "./storage";
+import { calcStats, buildSnapshots } from "./stats";
+import { renderBankrollChart }       from "./chart";
+import { exportToCsv }               from "./export";
 import type { BetInputs, KellyResult, SavedBet } from "./types";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
@@ -24,16 +23,27 @@ const errorMsg           = document.getElementById("errorMsg")          as HTMLP
 const resultBox          = document.getElementById("result")            as HTMLDivElement;
 const resultAmount       = document.getElementById("resultAmount")      as HTMLParagraphElement;
 const resultFrac         = document.getElementById("resultFraction")    as HTMLParagraphElement;
+const resultEdge         = document.getElementById("resultEdge")        as HTMLParagraphElement;
 const historyList        = document.getElementById("historyList")       as HTMLUListElement;
 const emptyMsg           = document.getElementById("emptyMsg")          as HTMLParagraphElement;
 const bankrollDisplay    = document.getElementById("bankrollDisplay")   as HTMLParagraphElement;
 const resetBankrollBtn   = document.getElementById("resetBankrollBtn")  as HTMLButtonElement;
 const resetBankrollInput = document.getElementById("resetBankrollInput")as HTMLInputElement;
+// Phase 2a
+const statWinRate        = document.getElementById("statWinRate")       as HTMLElement;
+const statPnl            = document.getElementById("statPnl")           as HTMLElement;
+const statRoi            = document.getElementById("statRoi")           as HTMLElement;
+const statAvgEdge        = document.getElementById("statAvgEdge")       as HTMLElement;
+const statDrawdown       = document.getElementById("statDrawdown")      as HTMLElement;
+const statStreak         = document.getElementById("statStreak")        as HTMLElement;
+const chartEl            = document.getElementById("bankrollChart")     as HTMLDivElement;
+const exportBtn          = document.getElementById("exportBtn")         as HTMLButtonElement;
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 let lastResult: KellyResult | null = null;
 let lastInputs: BetInputs  | null = null;
+let activeFilter: "all" | "active" | "won" | "lost" = "all";
 
 // ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -64,7 +74,7 @@ function validate(): BetInputs | null {
   return { bankroll, winProbability, decimalOdds, label };
 }
 
-// ── UI Helpers ─────────────────────────────────────────────────────────────────
+// ── UI helpers ─────────────────────────────────────────────────────────────────
 
 function showError(msg: string): void {
   errorMsg.textContent = msg;
@@ -90,18 +100,65 @@ function fmtPct(n: number): string {
 
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
-// ── Bankroll Display ───────────────────────────────────────────────────────────
+// ── Bankroll display ───────────────────────────────────────────────────────────
 
 function renderBankroll(): void {
-  const current = loadBankroll();
-  bankrollDisplay.textContent = fmt$(current);
+  bankrollDisplay.textContent = fmt$(loadBankroll());
+}
+
+// ── Stats panel ────────────────────────────────────────────────────────────────
+
+function renderStats(): void {
+  const bets  = loadBets();
+  const stats = calcStats(bets);
+
+  // Back-calculate starting bankroll from current bankroll minus all P&L
+  const startingBankroll = loadBankroll() - stats.totalPnl;
+  const snapshots        = buildSnapshots(bets, startingBankroll);
+
+  // Win Rate
+  statWinRate.textContent = stats.resolvedBets > 0
+    ? `${(stats.winRate * 100).toFixed(0)}%  (${stats.wins}W / ${stats.losses}L)`
+    : "—";
+
+  // Total P&L
+  statPnl.textContent = stats.resolvedBets > 0
+    ? `${stats.totalPnl >= 0 ? "+" : ""}${fmt$(stats.totalPnl)}`
+    : "—";
+  statPnl.className = `text-base font-bold mt-0.5 ${stats.totalPnl >= 0 ? "text-green-400" : "text-red-400"}`;
+
+  // ROI
+  statRoi.textContent = stats.resolvedBets > 0
+    ? `${stats.roi >= 0 ? "+" : ""}${(stats.roi * 100).toFixed(1)}%`
+    : "—";
+  statRoi.className = `text-base font-bold mt-0.5 ${stats.roi >= 0 ? "text-green-400" : "text-red-400"}`;
+
+  // Avg Edge
+  statAvgEdge.textContent = bets.length > 0
+    ? `${(stats.avgEdge * 100).toFixed(1)}%`
+    : "—";
+  statAvgEdge.className = `text-base font-bold mt-0.5 ${stats.avgEdge > 0 ? "text-indigo-300" : "text-red-400"}`;
+
+  // Max Drawdown
+  statDrawdown.textContent = stats.resolvedBets > 0
+    ? `${(stats.maxDrawdown * 100).toFixed(1)}%`
+    : "—";
+  statDrawdown.className = `text-base font-bold mt-0.5 ${stats.maxDrawdown < -0.1 ? "text-red-400" : "text-yellow-400"}`;
+
+  // Streak
+  statStreak.textContent =
+    stats.currentStreak === 0 ? "—"
+    : stats.currentStreak > 0 ? `🔥 ${stats.currentStreak}W`
+    : `❄️ ${Math.abs(stats.currentStreak)}L`;
+  statStreak.className = `text-base font-bold mt-0.5 ${stats.currentStreak >= 0 ? "text-green-400" : "text-red-400"}`;
+
+  // Chart
+  renderBankrollChart(chartEl, snapshots, startingBankroll);
 }
 
 // ── Calculate ──────────────────────────────────────────────────────────────────
@@ -123,6 +180,8 @@ function calculate(): void {
   resultFrac.textContent =
     `Half-Kelly: ${fmtPct(result.halfKellyFraction)} of bankroll` +
     `  ·  Full Kelly: ${fmtPct(result.fullKellyFraction)}`;
+  resultEdge.textContent  = `Edge: ${result.edge >= 0 ? "+" : ""}${(result.edge * 100).toFixed(1)}%`;
+  resultEdge.className    = `text-xs font-semibold mt-1 ${result.edge >= 0.05 ? "text-green-400" : "text-yellow-400"}`;
   resultBox.classList.remove("hidden");
 }
 
@@ -142,59 +201,69 @@ function save(): void {
   };
   saveBet(bet);
   renderHistory();
+  renderStats();
 }
 
-// ── Win / Lose Resolution ──────────────────────────────────────────────────────
+// ── Resolve ────────────────────────────────────────────────────────────────────
 
 function handleResolve(e: Event): void {
   const btn     = e.currentTarget as HTMLButtonElement;
   const id      = btn.dataset["id"]!;
   const outcome = btn.dataset["outcome"] as "won" | "lost";
-
   const newBankroll = resolveBet(id, outcome);
   bankrollDisplay.textContent = fmt$(newBankroll);
   renderHistory();
+  renderStats();
 }
 
 // ── History ────────────────────────────────────────────────────────────────────
 
 function renderHistory(): void {
-  const bets = loadBets();
+  const allBets = loadBets();
+  const bets    = activeFilter === "all"
+    ? allBets
+    : allBets.filter((b) => b.status === activeFilter);
+
   historyList.innerHTML = "";
 
   if (bets.length === 0) {
     emptyMsg.classList.remove("hidden");
+    emptyMsg.textContent = allBets.length === 0
+      ? "No saved bets yet."
+      : `No ${activeFilter} bets.`;
     return;
   }
-
   emptyMsg.classList.add("hidden");
 
   for (const bet of bets) {
-    const li = document.createElement("li");
-    li.className =
+    const li       = document.createElement("li");
+    li.className   =
       "rounded-xl bg-gray-900 border border-gray-800 px-4 py-3 " +
       "flex items-start justify-between gap-4";
 
+    const isActive = bet.status === "active";
     const date     = new Date(bet.savedAt).toLocaleString();
     const label    = bet.label ?? "Unnamed bet";
-    const isActive = bet.status === "active";
+    const edge     = bet.result.edge ?? 0;
 
-    // Status badge
     const badge = isActive
       ? `<span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">Active</span>`
       : bet.status === "won"
       ? `<span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">✅ Won</span>`
       : `<span class="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">❌ Lost</span>`;
 
-    // P&L row (only for resolved bets)
-    const pnlHtml =
-      !isActive && bet.pnl !== undefined
-        ? `<p class="text-xs font-semibold mt-1 ${bet.pnl >= 0 ? "text-green-400" : "text-red-400"}">
-             P&amp;L: ${bet.pnl >= 0 ? "+" : ""}${fmt$(bet.pnl)}
-           </p>`
-        : "";
+    const edgeBadge = `<span class="text-xs px-2 py-0.5 rounded ${
+      edge >= 0.05 ? "bg-indigo-500/20 text-indigo-300"
+      : edge > 0   ? "bg-yellow-500/20 text-yellow-400"
+      : "bg-red-500/20 text-red-400"
+    }">Edge: ${edge >= 0 ? "+" : ""}${(edge * 100).toFixed(1)}%</span>`;
 
-    // Action buttons (only for active bets) or resolved timestamp
+    const pnlHtml = !isActive && bet.pnl !== undefined
+      ? `<p class="text-xs font-semibold mt-1 ${bet.pnl >= 0 ? "text-green-400" : "text-red-400"}">
+           P&amp;L: ${bet.pnl >= 0 ? "+" : ""}${fmt$(bet.pnl)}
+         </p>`
+      : "";
+
     const actionHtml = isActive
       ? `<div class="flex flex-col gap-1 shrink-0">
            <button data-id="${bet.id}" data-outcome="won"
@@ -208,17 +277,18 @@ function renderHistory(): void {
              ❤️ Lose
            </button>
          </div>`
-      : `<p class="text-xs text-gray-600 shrink-0">
+      : `<p class="text-xs text-gray-600 shrink-0 text-right">
            ${new Date(bet.resolvedAt!).toLocaleString()}
          </p>`;
 
     li.innerHTML = `
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
           <p class="text-sm font-medium text-white truncate">${escapeHtml(label)}</p>
           ${badge}
+          ${edgeBadge}
         </div>
-        <p class="text-xs text-gray-400 mt-0.5">${date}</p>
+        <p class="text-xs text-gray-400">${date}</p>
         <p class="text-xs text-gray-500 mt-1">
           Bankroll: ${fmt$(bet.bankroll)} · p=${(bet.winProbability * 100).toFixed(1)}% · odds=${bet.decimalOdds}
         </p>
@@ -228,22 +298,36 @@ function renderHistory(): void {
         <p class="text-sm font-bold text-indigo-300">${fmt$(bet.result.recommendedBetAmount)}</p>
         <p class="text-xs text-gray-500">${fmtPct(bet.result.halfKellyFraction)}</p>
         ${actionHtml}
-      </div>
-    `;
+      </div>`;
 
     historyList.appendChild(li);
   }
 
-  // Attach Win/Lose listeners after rendering
   document.querySelectorAll<HTMLButtonElement>(".resolve-btn").forEach((btn) => {
     btn.addEventListener("click", handleResolve);
   });
 }
 
-// ── Event Listeners ────────────────────────────────────────────────────────────
+// ── Filter buttons ─────────────────────────────────────────────────────────────
+
+document.querySelectorAll<HTMLButtonElement>(".filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    activeFilter = btn.dataset["filter"] as typeof activeFilter;
+    document.querySelectorAll(".filter-btn").forEach((b) => {
+      b.classList.remove("bg-indigo-600", "text-white");
+      b.classList.add("bg-gray-800", "text-gray-400");
+    });
+    btn.classList.add("bg-indigo-600", "text-white");
+    btn.classList.remove("bg-gray-800", "text-gray-400");
+    renderHistory();
+  });
+});
+
+// ── Event listeners ────────────────────────────────────────────────────────────
 
 calcBtn.addEventListener("click", calculate);
 saveBtn.addEventListener("click", save);
+exportBtn.addEventListener("click", () => exportToCsv(loadBets()));
 
 clearBtn.addEventListener("click", () => {
   if (!confirm("Clear ALL bet history? This cannot be undone.")) return;
@@ -251,6 +335,7 @@ clearBtn.addEventListener("click", () => {
   lastResult = null;
   lastInputs = null;
   renderHistory();
+  renderStats();
 });
 
 resetBankrollBtn.addEventListener("click", () => {
@@ -273,4 +358,5 @@ resetBankrollBtn.addEventListener("click", () => {
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 renderBankroll();
+renderStats();
 renderHistory();
