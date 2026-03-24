@@ -1,172 +1,215 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full bg-gray-950">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kelly Bet Sizer</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: { extend: { colors: { brand: '#6366f1' } } }
-      }
-    </script>
-  </head>
-  <body class="h-full text-gray-100 font-sans antialiased">
-    <div class="min-h-full flex flex-col items-center justify-start py-12 px-4">
+      <!-- ── Phase 2b: Backtesting Engine ──────────────────────────── -->
+      <section id="backtestSection" class="w-full max-w-md mt-10">
 
-      <!-- ── Header + Live Bankroll ─────────────────────────────────── -->
-      <header class="mb-8 text-center w-full max-w-md">
-        <h1 class="text-3xl font-bold tracking-tight text-indigo-400">Kelly Bet Sizer</h1>
-        <p class="mt-1 text-sm text-gray-400">Half-Kelly position sizing · Phase 2a</p>
-        <div class="mt-5 rounded-2xl bg-gray-900 border border-gray-700 px-6 py-4 flex items-center justify-between">
-          <div class="text-left">
-            <p class="text-xs uppercase tracking-widest text-gray-500 font-semibold">Current Bankroll</p>
-            <p id="bankrollDisplay" class="text-2xl font-extrabold text-green-400 mt-0.5">HKD 10,000.00</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <input id="resetBankrollInput" type="number" min="1" step="1"
-              placeholder="New amount"
-              class="w-28 rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
-                     text-xs text-white placeholder-gray-500
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-            <button id="resetBankrollBtn"
-              class="rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors
-                     px-3 py-1.5 text-xs font-semibold text-gray-200">
-              Reset
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <!-- ── Stats Panel ────────────────────────────────────────────── -->
-      <section class="w-full max-w-md mb-8">
-        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Performance</h2>
-        <div class="grid grid-cols-3 gap-2 mb-4">
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">Win Rate</p>
-            <p id="statWinRate" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">Total P&amp;L</p>
-            <p id="statPnl" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">ROI</p>
-            <p id="statRoi" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">Avg Edge</p>
-            <p id="statAvgEdge" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">Max Drawdown</p>
-            <p id="statDrawdown" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-          <div class="rounded-xl bg-gray-900 border border-gray-800 p-3 text-center">
-            <p class="text-xs text-gray-500">Streak</p>
-            <p id="statStreak" class="text-base font-bold text-white mt-0.5">—</p>
-          </div>
-        </div>
-        <!-- Bankroll Chart -->
-        <div class="rounded-xl bg-gray-900 border border-gray-800 p-4">
-          <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Bankroll Over Time</p>
-          <div id="bankrollChart"></div>
-        </div>
-      </section>
-
-      <!-- ── Calculator Card ────────────────────────────────────────── -->
-      <section class="w-full max-w-md bg-gray-900 rounded-2xl shadow-xl p-6 space-y-5">
-        <div>
-          <label for="bankroll" class="block text-sm font-medium text-gray-300 mb-1">
-            Bankroll for this Bet (HKD)
-          </label>
-          <input id="bankroll" type="number" min="0" step="0.01" placeholder="e.g. 10000"
-            class="w-full rounded-lg bg-gray-800 border border-gray-700 px-3 py-2
-                   text-sm text-white placeholder-gray-500
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-        </div>
-        <div>
-          <label for="winProb" class="block text-sm font-medium text-gray-300 mb-1">
-            Win Probability (%)
-            <span class="text-gray-500 font-normal">— e.g. enter 60 for 60%</span>
-          </label>
-          <input id="winProb" type="number" min="1" max="99" step="1" placeholder="e.g. 60"
-            class="w-full rounded-lg bg-gray-800 border border-gray-700 px-3 py-2
-                   text-sm text-white placeholder-gray-500
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-        </div>
-        <div>
-          <label for="odds" class="block text-sm font-medium text-gray-300 mb-1">
-            Decimal Odds
-            <span class="text-gray-500 font-normal">— e.g. 2.0 = even money</span>
-          </label>
-          <input id="odds" type="number" min="1.01" step="0.01" placeholder="e.g. 1.85"
-            class="w-full rounded-lg bg-gray-800 border border-gray-700 px-3 py-2
-                   text-sm text-white placeholder-gray-500
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-        </div>
-        <div>
-          <label for="betName" class="block text-sm font-medium text-gray-300 mb-1">
-            Bet Label <span class="text-gray-500">(optional)</span>
-          </label>
-          <input id="betName" type="text" maxlength="60" placeholder="e.g. Arsenal vs Chelsea"
-            class="w-full rounded-lg bg-gray-800 border border-gray-700 px-3 py-2
-                   text-sm text-white placeholder-gray-500
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-        </div>
-        <p id="errorMsg" class="hidden text-sm text-red-400"></p>
-        <div id="result" class="hidden rounded-xl bg-indigo-950 border border-indigo-700 p-4 space-y-1">
-          <p class="text-xs uppercase tracking-widest text-indigo-400 font-semibold">Recommended Bet</p>
-          <p id="resultAmount" class="text-2xl font-bold text-white"></p>
-          <p id="resultFraction" class="text-xs text-indigo-300"></p>
-          <p id="resultEdge" class="text-xs font-semibold"></p>
-        </div>
-        <div class="flex gap-3">
-          <button id="calcBtn"
-            class="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
-                   transition-colors py-2 text-sm font-semibold text-white">
-            Calculate
-          </button>
-          <button id="saveBtn"
-            class="flex-1 rounded-lg bg-gray-700 hover:bg-gray-600 active:bg-gray-800
-                   transition-colors py-2 text-sm font-semibold text-gray-200">
-            Save Bet
-          </button>
-        </div>
-      </section>
-
-      <!-- ── Bet History ─────────────────────────────────────────────── -->
-      <section class="w-full max-w-md mt-8">
-        <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center justify-between mb-4">
           <div>
-            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bet History</h2>
-            <p class="text-xs text-gray-600 mt-0.5">Click 💚 Win or ❤️ Lose to resolve</p>
+            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Backtesting Engine</h2>
+            <p class="text-xs text-gray-600 mt-0.5">Upload a football-data.co.uk CSV to simulate your strategy</p>
           </div>
-          <div class="flex items-center gap-2">
-            <button id="exportBtn"
-              class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300
-                     px-3 py-1.5 rounded-lg transition-colors">
-              ⬇ Export CSV
-            </button>
-            <button id="clearBtn" class="text-xs text-red-500 hover:text-red-400 transition-colors">
-              Clear all
-            </button>
-          </div>
+          <button id="btToggleBtn"
+            class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
+            ▼ Hide
+          </button>
         </div>
-        <!-- Filter buttons -->
-        <div class="flex gap-2 mb-3">
-          <button data-filter="all"    class="filter-btn text-xs px-3 py-1 rounded-full bg-indigo-600 text-white">All</button>
-          <button data-filter="active" class="filter-btn text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:bg-gray-700">Active</button>
-          <button data-filter="won"    class="filter-btn text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:bg-gray-700">Won</button>
-          <button data-filter="lost"   class="filter-btn text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:bg-gray-700">Lost</button>
-        </div>
-        <ul id="historyList" class="space-y-2"></ul>
-        <p id="emptyMsg" class="text-center text-xs text-gray-600 py-4">No saved bets yet.</p>
-      </section>
 
-    </div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
+        <div id="btBody" class="space-y-5">
+
+          <!-- Step 1: CSV Upload -->
+          <div class="rounded-2xl bg-gray-900 border border-gray-700 p-5 space-y-3">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Step 1 — Upload CSV</p>
+            <p class="text-xs text-gray-500">
+              Download free historical odds from
+              <a href="https://www.football-data.co.uk/data.php" target="_blank"
+                class="text-indigo-400 hover:underline">football-data.co.uk</a>.
+              Any league, any season.
+            </p>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <span class="rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors
+                           px-4 py-2 text-xs font-semibold text-white whitespace-nowrap">
+                Choose CSV
+              </span>
+              <span id="btFileLabel" class="text-xs text-gray-500 truncate">No file chosen</span>
+              <input id="btFileInput" type="file" accept=".csv,text/csv" class="hidden" />
+            </label>
+            <p id="btRowCount" class="text-xs text-gray-500"></p>
+            <p id="btParseErrors" class="hidden text-xs text-yellow-400 break-words"></p>
+          </div>
+
+          <!-- Step 2: Strategy -->
+          <div class="rounded-2xl bg-gray-900 border border-gray-700 p-5 space-y-4">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Step 2 — Strategy Model</p>
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+              <input id="btStrategyMkt" type="radio" name="btStrategy" value="market" checked class="accent-indigo-500" />
+              Market-implied
+              <span class="text-xs text-gray-500">(use Pinnacle / normalised odds as true p)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+              <input id="btStrategyFlat" type="radio" name="btStrategy" value="flat" class="accent-indigo-500" />
+              Flat model
+              <span class="text-xs text-gray-500">(you supply fixed probabilities for H / D / A)</span>
+            </label>
+            <div id="btFlatProbs" class="hidden grid grid-cols-3 gap-2 pt-1">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Home win %</label>
+                <input id="btFlatHome" type="number" min="1" max="98" step="1" placeholder="e.g. 45"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white placeholder-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Draw %</label>
+                <input id="btFlatDraw" type="number" min="1" max="98" step="1" placeholder="e.g. 27"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white placeholder-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Away win %</label>
+                <input id="btFlatAway" type="number" min="1" max="98" step="1" placeholder="e.g. 28"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white placeholder-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Simulation Controls -->
+          <div class="rounded-2xl bg-gray-900 border border-gray-700 p-5 space-y-4">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Step 3 — Simulation Controls</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Starting Bankroll (HKD)</label>
+                <input id="btStartBankroll" type="number" min="1" step="100" placeholder="e.g. 10000"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white placeholder-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Min Edge Threshold (%)</label>
+                <input id="btMinEdge" type="number" min="0" max="50" step="0.5" placeholder="e.g. 3"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white placeholder-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Kelly Fraction</label>
+                <select id="btKellyFrac"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="half" selected>Half-Kelly</option>
+                  <option value="full">Full Kelly</option>
+                  <option value="quarter">Quarter-Kelly</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Train / Test Cutoff</label>
+                <input id="btCutoffDate" type="date"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                         text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
+            <p id="btRunError" class="hidden text-xs text-red-400"></p>
+            <button id="btRunBtn"
+              class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+                     transition-colors py-2.5 text-sm font-semibold text-white">
+              ▶ Run Backtest
+            </button>
+          </div>
+
+          <!-- Results Panel -->
+          <div id="btResults" class="hidden space-y-4">
+
+            <!-- Robustness gate -->
+            <div class="rounded-2xl bg-gray-900 border border-gray-700 p-4 flex items-start gap-3">
+              <span id="btRobustBadge" class="text-sm font-bold px-3 py-1 rounded-full shrink-0">—</span>
+              <p id="btRobustReason" class="text-xs text-gray-400 leading-relaxed"></p>
+            </div>
+
+            <!-- Stats grid -->
+            <div class="rounded-2xl bg-gray-900 border border-gray-700 p-4 space-y-3">
+              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Results</p>
+              <div class="grid grid-cols-4 gap-1 text-xs text-gray-600 font-semibold uppercase tracking-wider pb-1 border-b border-gray-800">
+                <span></span>
+                <span class="text-center text-blue-500">Train</span>
+                <span class="text-center text-purple-400">Test</span>
+                <span class="text-center text-gray-400">Total</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">Bets</span>
+                <span id="btTrainBets"     class="text-center text-gray-300">—</span>
+                <span id="btTestBets"      class="text-center text-gray-300">—</span>
+                <span id="btTotalBets"     class="text-center text-gray-300">—</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">Win Rate</span>
+                <span id="btTrainWinRate"  class="text-center text-gray-300">—</span>
+                <span id="btTestWinRate"   class="text-center text-gray-300">—</span>
+                <span id="btTotalWinRate"  class="text-center text-gray-300">—</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">ROI</span>
+                <span id="btTrainRoi"      class="text-center text-gray-300">—</span>
+                <span id="btTestRoi"       class="text-center text-gray-300">—</span>
+                <span id="btTotalRoi"      class="text-center text-gray-300">—</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">Total P&amp;L</span>
+                <span id="btTrainPnl"      class="text-center text-gray-300">—</span>
+                <span id="btTestPnl"       class="text-center text-gray-300">—</span>
+                <span id="btTotalPnl"      class="text-center text-gray-300">—</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">Max Drawdown</span>
+                <span id="btTrainDrawdown" class="text-center text-yellow-400">—</span>
+                <span id="btTestDrawdown"  class="text-center text-yellow-400">—</span>
+                <span id="btTotalDrawdown" class="text-center text-yellow-400">—</span>
+              </div>
+              <div class="grid grid-cols-4 gap-1 items-center text-xs">
+                <span class="text-gray-500">Final Bankroll</span>
+                <span id="btTrainFinal"    class="text-center text-gray-300">—</span>
+                <span id="btTestFinal"     class="text-center text-gray-300">—</span>
+                <span id="btTotalFinal"    class="text-center text-gray-300">—</span>
+              </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="rounded-2xl bg-gray-900 border border-gray-700 p-4">
+              <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Simulated Bankroll Over Time</p>
+              <div id="btChart"></div>
+            </div>
+
+            <!-- Bet log -->
+            <div class="rounded-2xl bg-gray-900 border border-gray-700 p-4">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Bet Log</p>
+                <button id="btShowTableBtn"
+                  class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded-lg transition-colors">
+                  ▶ Show all bets
+                </button>
+              </div>
+              <div id="btTableWrap" class="hidden overflow-x-auto">
+                <table class="w-full text-left min-w-[600px]">
+                  <thead>
+                    <tr class="text-xs text-gray-600 uppercase tracking-wider">
+                      <th class="px-2 py-1.5">Date</th>
+                      <th class="px-2 py-1.5">Match (Outcome)</th>
+                      <th class="px-2 py-1.5">Odds</th>
+                      <th class="px-2 py-1.5">Edge</th>
+                      <th class="px-2 py-1.5">Stake</th>
+                      <th class="px-2 py-1.5">P&amp;L</th>
+                      <th class="px-2 py-1.5">Bankroll</th>
+                      <th class="px-2 py-1.5">Split</th>
+                    </tr>
+                  </thead>
+                  <tbody id="btBetTableBody" class="text-gray-300"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+          <!-- /btResults -->
+
+        </div>
+        <!-- /btBody -->
+      </section>
+      <!-- /backtestSection -->

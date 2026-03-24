@@ -9,6 +9,7 @@ import { calcStats, buildSnapshots } from "./stats";
 import { renderBankrollChart }       from "./chart";
 import { exportToCsv }               from "./export";
 import type { BetInputs, KellyResult, SavedBet } from "./types";
+import { initBacktest } from "./backtest-ui";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 
@@ -360,3 +361,4 @@ resetBankrollBtn.addEventListener("click", () => {
 renderBankroll();
 renderStats();
 renderHistory();
+initBacktest();
