@@ -14,11 +14,10 @@ export interface KellyResult {
 }
 
 export interface SavedBet extends BetInputs {
-  id: string;
-  savedAt: string;
-  result: KellyResult;
-  // ── Phase 1 additions ──────────────────────────
-  status: "active" | "won" | "lost";
-  resolvedAt?: string;
-  pnl?: number;           // profit (positive) or loss (negative)
+  id:          string;
+  savedAt:     string;
+  result:      KellyResult;
+  status:      "active" | "won" | "lost";  // ← NEW
+  resolvedAt?: string;                      // ← NEW
+  pnl?:        number;                      // ← NEW: positive = profit, negative = loss
 }
