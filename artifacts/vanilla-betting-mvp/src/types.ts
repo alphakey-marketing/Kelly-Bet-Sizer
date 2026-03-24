@@ -1,100 +1,126 @@
-// artifacts/vanilla-betting-mvp/src/stats.ts
+// artifacts/vanilla-betting-mvp/src/types.ts
 
-import type { SavedBet, BankrollSnapshot } from "./types";
+// ── Live-betting types ─────────────────────────────────────────────────────────
 
-export interface PerformanceStats {
-  totalBets:     number;
-  resolvedBets:  number;
-  wins:          number;
-  losses:        number;
-  winRate:       number;   // 0–1
-  totalStaked:   number;
-  totalPnl:      number;
-  roi:           number;   // totalPnl / totalStaked
-  maxDrawdown:   number;   // e.g. -0.18 = -18% peak-to-trough
-  avgEdge:       number;   // average edge across all saved bets
-  currentStreak: number;   // +3 = 3-win streak, -2 = 2-loss streak
+export interface BetInputs {
+  bankroll:        number;
+  winProbability:  number;  // 0–1
+  decimalOdds:     number;
+  label?:          string;
 }
 
-export function calcStats(bets: SavedBet[]): PerformanceStats {
-  const resolved = bets.filter((b) => b.status !== "active");
-  const wins     = resolved.filter((b) => b.status === "won");
-  const losses   = resolved.filter((b) => b.status === "lost");
-
-  const totalStaked = resolved.reduce(
-    (sum, b) => sum + b.result.recommendedBetAmount, 0
-  );
-  const totalPnl = resolved.reduce((sum, b) => sum + (b.pnl ?? 0), 0);
-  const roi      = totalStaked > 0 ? totalPnl / totalStaked : 0;
-  const winRate  = resolved.length > 0 ? wins.length / resolved.length : 0;
-  const avgEdge  = bets.length > 0
-    ? bets.reduce((sum, b) => sum + (b.result.edge ?? 0), 0) / bets.length
-    : 0;
-
-  // Max drawdown: largest peak-to-trough drop in cumulative P&L
-  const chronological = [...resolved].sort(
-    (a, b) => new Date(a.resolvedAt!).getTime() - new Date(b.resolvedAt!).getTime()
-  );
-  let peak = 0;
-  let runningPnl = 0;
-  let maxDrawdown = 0;
-  for (const bet of chronological) {
-    runningPnl += bet.pnl ?? 0;
-    if (runningPnl > peak) peak = runningPnl;
-    const dd = peak > 0 ? (runningPnl - peak) / peak : 0;
-    if (dd < maxDrawdown) maxDrawdown = dd;
-  }
-
-  // Current streak: count consecutive same outcomes from most recent
-  let currentStreak = 0;
-  const byRecent = [...resolved].sort(
-    (a, b) => new Date(b.resolvedAt!).getTime() - new Date(a.resolvedAt!).getTime()
-  );
-  if (byRecent.length > 0) {
-    const dir = byRecent[0].status; // "won" or "lost"
-    for (const b of byRecent) {
-      if (b.status !== dir) break;
-      currentStreak += dir === "won" ? 1 : -1;
-    }
-  }
-
-  return {
-    totalBets:     bets.length,
-    resolvedBets:  resolved.length,
-    wins:          wins.length,
-    losses:        losses.length,
-    winRate,
-    totalStaked,
-    totalPnl,
-    roi,
-    maxDrawdown,
-    avgEdge,
-    currentStreak,
-  };
+export interface KellyResult {
+  fullKellyFraction:    number;
+  halfKellyFraction:    number;
+  recommendedBetAmount: number;
+  edge:                 number;  // p*b - q
 }
 
-// Build time-ordered snapshots for the bankroll chart
-export function buildSnapshots(
-  bets: SavedBet[],
-  startingBankroll: number
-): BankrollSnapshot[] {
-  const resolved = bets
-    .filter((b) => b.status !== "active" && b.resolvedAt)
-    .sort(
-      (a, b) =>
-        new Date(a.resolvedAt!).getTime() - new Date(b.resolvedAt!).getTime()
-    );
+export type BetStatus = "active" | "won" | "lost";
 
-  let running = startingBankroll;
-  return resolved.map((bet) => {
-    running += bet.pnl ?? 0;
-    return {
-      date:     bet.resolvedAt!,
-      bankroll: running,
-      betId:    bet.id,
-      label:    bet.label ?? "Unnamed",
-      outcome:  bet.status as "won" | "lost",
-      pnl:      bet.pnl ?? 0,
-    };
-  });
+export interface SavedBet {
+  id:             string;
+  savedAt:        string;   // ISO timestamp
+  status:         BetStatus;
+  bankroll:       number;
+  winProbability: number;
+  decimalOdds:    number;
+  label?:         string;
+  result:         KellyResult;
+  pnl?:           number;   // set when resolved
+  resolvedAt?:    string;   // ISO timestamp
+}
+
+export interface BankrollSnapshot {
+  date:     string;          // ISO timestamp
+  bankroll: number;
+  betId:    string;
+  label:    string;
+  outcome:  "won" | "lost";
+  pnl:      number;
+}
+
+// ── Backtesting types ──────────────────────────────────────────────────────────
+
+/** One parsed row from a football-data.co.uk CSV file */
+export interface BacktestRow {
+  date:     string;       // YYYY-MM-DD (normalised from DD/MM/YYYY)
+  home:     string;       // home team name
+  away:     string;       // away team name
+  result:   "H" | "D" | "A";  // full-time result
+  oddsH:    number;       // decimal odds for home win
+  oddsD:    number;       // decimal odds for draw
+  oddsA:    number;       // decimal odds for away win
+  // Optional Pinnacle closing-line odds
+  psH?:     number;
+  psD?:     number;
+  psA?:     number;
+}
+
+/** Kelly staking fraction to apply */
+export type KellyFraction = "full" | "half" | "quarter";
+
+/** Probability estimation strategy */
+export type StrategyModel = "flat" | "market";
+
+/** Configuration for a single backtest run */
+export interface BacktestConfig {
+  league:           string;
+  season:           string;
+  kellyFraction:    KellyFraction;
+  strategyModel:    StrategyModel;
+  /** Proportion of rows used for training (0–1) */
+  trainRatio:       number;
+  startingBankroll: number;
+  /** Minimum edge required before placing a bet (0–1) */
+  minEdge:          number;
+}
+
+/** A single bet placed during a backtest */
+export interface BacktestBet {
+  date:          string;
+  home:          string;
+  away:          string;
+  selection:     "H" | "D" | "A";  // which outcome was bet on
+  predictedProb: number;            // model's estimated probability
+  impliedProb:   number;            // 1 / decimalOdds (no-vig)
+  edge:          number;            // predictedProb - impliedProb
+  decimalOdds:   number;
+  kellyFrac:     number;            // fraction of bankroll staked
+  stake:         number;            // absolute stake in bankroll units
+  bankrollBefore: number;
+  bankrollAfter:  number;
+  outcome:       "won" | "lost";
+  pnl:           number;
+}
+
+/** Aggregate metrics for a period (train, test, or total) */
+export interface BacktestResult {
+  config:    BacktestConfig;
+  bets:      BacktestBet[];
+  train:     BacktestPeriodStats;
+  test:      BacktestPeriodStats;
+  total:     BacktestPeriodStats;
+  snapshots: BankrollSnapshot[];
+}
+
+/** Per-period aggregate statistics */
+export interface BacktestPeriodStats {
+  bets:        number;
+  wins:        number;
+  winRate:     number;   // 0–1
+  totalStaked: number;
+  totalPnl:    number;
+  roi:         number;   // totalPnl / totalStaked
+  maxDrawdown: number;   // e.g. -0.18 = -18%
+  finalBankroll: number;
+}
+
+/** High-level summary across one or many BacktestResult runs */
+export interface BacktestSummary {
+  runs:        BacktestResult[];
+  bestRun:     BacktestResult | null;
+  worstRun:    BacktestResult | null;
+  avgRoi:      number;
+  avgWinRate:  number;
 }
