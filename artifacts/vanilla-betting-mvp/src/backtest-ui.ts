@@ -32,29 +32,41 @@ function escapeHtml(str: string): string {
 // ── Result renderer ────────────────────────────────────────────────────────────
 
 function renderResults(result: BacktestResult): void {
-  const btResults    = $("btResults");
-  const btRobust     = $("btRobustBadge");
-  const btBetsPlaced = $("btBetsPlaced");
-  const btWinRate    = $("btWinRate");
-  const btRoi        = $("btRoi");
-  const btPnl        = $("btPnl");
-  const btDrawdown   = $("btDrawdown");
-  const btAvgEdge    = $("btAvgEdge");
-  const btChart      = $("btChart") as HTMLDivElement;
-  const btTrades     = $("btTradesTable");
+  const btResults     = $("btResults");
+  const btRobust      = $("btRobustBadge");
+  const btRobustFlags = $("btRobustFlags");
+  const btBetsPlaced  = $("btBetsPlaced");
+  const btWinRate     = $("btWinRate");
+  const btRoi         = $("btRoi");
+  const btPnl         = $("btPnl");
+  const btDrawdown    = $("btDrawdown");
+  const btAvgEdge     = $("btAvgEdge");
+  const btChart       = $("btChart") as HTMLDivElement;
+  const btTrades      = $("btTradesTable");
+  const btDateRange   = $("btDateRange");
 
   btResults.classList.remove("hidden");
 
-  // Robustness badge
+  // ── Issue 5: Robustness badge with flags ───────────────────────────────────
   const robust = isRobust(result);
   btRobust.textContent = robust
     ? "✅ Strategy appears robust"
-    : "⚠️ Strategy may not be robust (too few bets, negative ROI, or high drawdown)";
+    : "⚠️ Strategy may not be robust";
   btRobust.className = robust
     ? "rounded-xl px-4 py-2 text-center text-sm font-semibold bg-green-500/20 text-green-400"
     : "rounded-xl px-4 py-2 text-center text-sm font-semibold bg-yellow-500/20 text-yellow-400";
 
-  // Stats
+  if (result.robustnessFlags.length > 0) {
+    btRobustFlags.innerHTML = result.robustnessFlags
+      .map((f) => `<p class="text-xs text-yellow-400/80 mt-1">• ${escapeHtml(f)}</p>`)
+      .join("");
+    btRobustFlags.classList.remove("hidden");
+  } else {
+    btRobustFlags.innerHTML = "";
+    btRobustFlags.classList.add("hidden");
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
   btBetsPlaced.textContent =
     `${result.betsPlaced} (${result.betsSkipped} skipped)`;
 
@@ -86,7 +98,17 @@ function renderResults(result: BacktestResult): void {
   btAvgEdge.className =
     `text-base font-bold mt-0.5 ${result.avgEdge > 0 ? "text-indigo-300" : "text-red-400"}`;
 
-  // Bankroll chart – convert trades to BankrollSnapshot[]
+  // ── Issue 6: Date range display ─────────────────────────────────────────────
+  if (result.trades.length > 0) {
+    const first = result.trades[0].date;
+    const last  = result.trades[result.trades.length - 1].date;
+    btDateRange.textContent = first === last ? `Date: ${first}` : `Period: ${first} → ${last}`;
+    btDateRange.classList.remove("hidden");
+  } else {
+    btDateRange.classList.add("hidden");
+  }
+
+  // ── Bankroll chart ─────────────────────────────────────────────────────────
   const snapshots: BankrollSnapshot[] = result.trades.map((t: BacktestTrade) => ({
     date:     t.date,
     bankroll: t.bankroll,
@@ -97,7 +119,7 @@ function renderResults(result: BacktestResult): void {
   }));
   renderBankrollChart(btChart, snapshots, result.startingBankroll);
 
-  // Recent trades (last 10, newest first)
+  // ── Recent trades (last 10, newest first) ──────────────────────────────────
   const recent = result.trades.slice(-10).reverse();
   btTrades.innerHTML = recent.length === 0
     ? `<p class="text-xs text-gray-600 py-2 text-center">No trades placed.</p>`
@@ -105,7 +127,7 @@ function renderResults(result: BacktestResult): void {
         <div class="flex items-center justify-between rounded-lg bg-gray-800 border border-gray-700 px-3 py-2 text-xs">
           <div class="min-w-0">
             <p class="text-gray-200 truncate">${escapeHtml(t.match)}</p>
-            <p class="text-gray-500 mt-0.5">${t.date} · odds ${t.odds.toFixed(2)} · edge ${(t.edge * 100).toFixed(1)}%</p>
+            <p class="text-gray-500 mt-0.5">${t.date} · ${t.betSide} · odds ${t.odds.toFixed(2)} · edge ${(t.edge * 100).toFixed(1)}%</p>
           </div>
           <div class="text-right shrink-0 ml-3">
             <p class="font-semibold ${t.pnl >= 0 ? "text-green-400" : "text-red-400"}">
@@ -119,9 +141,9 @@ function renderResults(result: BacktestResult): void {
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 export function initBacktest(): void {
-  const csvInput = $("btCsvInput")  as HTMLInputElement;
-  const runBtn   = $("btRunBtn")    as HTMLButtonElement;
-  const errorMsg = $("btErrorMsg")  as HTMLParagraphElement;
+  const csvInput  = $("btCsvInput")  as HTMLInputElement;
+  const runBtn    = $("btRunBtn")    as HTMLButtonElement;
+  const errorMsg  = $("btErrorMsg")  as HTMLParagraphElement;
   const btResults = $("btResults");
 
   function showError(msg: string): void {
@@ -150,16 +172,25 @@ export function initBacktest(): void {
       return;
     }
 
-    const betSide       = ($("btBetSide")   as HTMLSelectElement).value as "home" | "draw" | "away";
-    const kellyFraction = parseFloat(($("btKellyFrac") as HTMLSelectElement).value);
-    const minEdgeRaw    = parseFloat(($("btMinEdge")   as HTMLInputElement).value);
-    const minEdge       = isFinite(minEdgeRaw) ? minEdgeRaw / 100 : 0;
+    const betSide         = ($("btBetSide")   as HTMLSelectElement).value as BacktestConfig["betSide"];
+    const kellyFraction   = parseFloat(($("btKellyFrac") as HTMLSelectElement).value);
+    const minEdgeRaw      = parseFloat(($("btMinEdge")   as HTMLInputElement).value);
+    const minEdge         = isFinite(minEdgeRaw) ? minEdgeRaw / 100 : 0;
+    // ── Issue 4: Read min stake ─────────────────────────────────────────────
+    const minStakeRaw     = parseFloat(($("btMinStake")  as HTMLInputElement).value);
+    const minStakeAmount  = isFinite(minStakeRaw) && minStakeRaw > 0 ? minStakeRaw : 0;
+    // ── Issue 6: Read date filters ──────────────────────────────────────────
+    const dateFromRaw     = ($("btDateFrom") as HTMLInputElement).value.trim();
+    const dateToRaw       = ($("btDateTo")   as HTMLInputElement).value.trim();
 
     const config: BacktestConfig = {
       startingBankroll,
       betSide,
       kellyFraction,
       minEdge,
+      minStakeAmount,
+      ...(dateFromRaw ? { dateFrom: dateFromRaw } : {}),
+      ...(dateToRaw   ? { dateTo:   dateToRaw   } : {}),
     };
 
     const reader = new FileReader();
@@ -183,10 +214,17 @@ export function initBacktest(): void {
 
       const result = runBacktest(rows, config);
 
+      // ── Issue 1: No Pinnacle odds warning ─────────────────────────────────
+      if (!result.hasPinnacleOdds) {
+        showError(result.skipReason ?? "No Pinnacle odds found in CSV.");
+        return;
+      }
+
       if (result.betsPlaced === 0) {
         showError(
-          `No bets were placed with min edge ${(minEdge * 100).toFixed(1)}%. ` +
-          `Try lowering the Min Edge threshold, or use a CSV with Pinnacle (PS) odds columns for value detection.`
+          result.skipReason ??
+          `No bets were placed with min edge ${(minEdge * 100).toFixed(1)}% and min stake HKD ${minStakeAmount}. ` +
+          `Try lowering the Min Edge threshold or Min Stake.`
         );
         return;
       }
@@ -198,3 +236,4 @@ export function initBacktest(): void {
     reader.readAsText(file);
   });
 }
+

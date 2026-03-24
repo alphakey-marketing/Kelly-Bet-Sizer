@@ -52,10 +52,13 @@ export interface BacktestRow {
 
 /** Configuration for a backtest run. */
 export interface BacktestConfig {
-  startingBankroll: number;                    // initial bankroll amount
-  betSide:          "home" | "draw" | "away";  // which outcome to bet on
-  kellyFraction:    number;                    // e.g. 0.5 = half-Kelly
-  minEdge:          number;                    // minimum edge (decimal) to place a bet, e.g. 0.02
+  startingBankroll: number;                              // initial bankroll amount
+  betSide:          "home" | "draw" | "away" | "best";  // "best" = auto-select highest-edge side per match
+  kellyFraction:    number;                              // e.g. 0.5 = half-Kelly
+  minEdge:          number;                              // minimum edge (decimal) to place a bet, e.g. 0.02
+  minStakeAmount:   number;                              // minimum stake floor (0 = no floor)
+  dateFrom?:        string;                              // ISO YYYY-MM-DD — only include matches on/after this date
+  dateTo?:          string;                              // ISO YYYY-MM-DD — only include matches on/before this date
 }
 
 /** A single simulated bet produced by the backtester. */
@@ -84,4 +87,7 @@ export interface BacktestResult {
   finalBankroll:    number;
   startingBankroll: number;
   avgEdge:          number;    // mean edge across all placed bets (decimal)
+  hasPinnacleOdds:  boolean;   // whether any row had PS odds (CLV source)
+  skipReason?:      string;    // set when the run was aborted before placing any bets
+  robustnessFlags:  string[];  // list of failed robustness checks (empty = robust)
 }

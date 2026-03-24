@@ -16,7 +16,7 @@ export interface PerformanceStats {
   currentStreak: number;   // +3 = 3-win streak, -2 = 2-loss streak
 }
 
-export function calcStats(bets: SavedBet[]): PerformanceStats {
+export function calcStats(bets: SavedBet[], startingBankroll: number): PerformanceStats {
   const resolved = bets.filter((b) => b.status !== "active");
   const wins     = resolved.filter((b) => b.status === "won");
   const losses   = resolved.filter((b) => b.status === "lost");
@@ -31,17 +31,17 @@ export function calcStats(bets: SavedBet[]): PerformanceStats {
     ? bets.reduce((sum, b) => sum + (b.result.edge ?? 0), 0) / bets.length
     : 0;
 
-  // Max drawdown: largest peak-to-trough drop in cumulative P&L
+  // Max drawdown: largest peak-to-trough drop in bankroll (bankroll-based, mirrors backtest.ts)
   const chronological = [...resolved].sort(
     (a, b) => new Date(a.resolvedAt!).getTime() - new Date(b.resolvedAt!).getTime()
   );
-  let peak = 0;
-  let runningPnl = 0;
+  let peakBankroll = startingBankroll;
+  let runningBankroll = startingBankroll;
   let maxDrawdown = 0;
   for (const bet of chronological) {
-    runningPnl += bet.pnl ?? 0;
-    if (runningPnl > peak) peak = runningPnl;
-    const dd = peak > 0 ? (runningPnl - peak) / peak : 0;
+    runningBankroll += bet.pnl ?? 0;
+    if (runningBankroll > peakBankroll) peakBankroll = runningBankroll;
+    const dd = (runningBankroll - peakBankroll) / peakBankroll;
     if (dd < maxDrawdown) maxDrawdown = dd;
   }
 

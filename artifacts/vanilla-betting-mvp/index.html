@@ -197,6 +197,7 @@
               <select id="btBetSide"
                 class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
                        text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="best">Best Edge (auto)</option>
                 <option value="home">Home Win</option>
                 <option value="draw">Draw</option>
                 <option value="away">Away Win</option>
@@ -218,6 +219,24 @@
                 class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
                        text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
             </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Min Stake (HKD)</label>
+              <input id="btMinStake" type="number" min="0" step="1" value="0"
+                class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                       text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Date From (optional)</label>
+              <input id="btDateFrom" type="date"
+                class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                       text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div class="col-span-2">
+              <label class="block text-xs font-medium text-gray-400 mb-1">Date To (optional)</label>
+              <input id="btDateTo" type="date"
+                class="w-full rounded-lg bg-gray-800 border border-gray-700 px-2 py-1.5
+                       text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
           </div>
 
           <!-- Run button -->
@@ -235,6 +254,10 @@
 
             <!-- Robustness badge -->
             <div id="btRobustBadge" class="rounded-xl px-4 py-2 text-center text-sm font-semibold"></div>
+            <div id="btRobustFlags" class="hidden px-2 text-center space-y-0.5"></div>
+
+            <!-- Date range -->
+            <p id="btDateRange" class="hidden text-center text-xs text-gray-500"></p>
 
             <!-- Stats grid -->
             <div class="grid grid-cols-3 gap-2">

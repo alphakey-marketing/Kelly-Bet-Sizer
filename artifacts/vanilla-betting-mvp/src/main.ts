@@ -116,10 +116,12 @@ function renderBankroll(): void {
 
 function renderStats(): void {
   const bets  = loadBets();
-  const stats = calcStats(bets);
 
   // Back-calculate starting bankroll from current bankroll minus all P&L
-  const startingBankroll = loadBankroll() - stats.totalPnl;
+  const resolvedPnl      = bets.filter((b) => b.status !== "active")
+                               .reduce((sum, b) => sum + (b.pnl ?? 0), 0);
+  const startingBankroll = loadBankroll() - resolvedPnl;
+  const stats = calcStats(bets, startingBankroll);
   const snapshots        = buildSnapshots(bets, startingBankroll);
 
   // Win Rate
