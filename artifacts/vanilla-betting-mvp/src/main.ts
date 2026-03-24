@@ -8,6 +8,7 @@ import {
 import { calcStats, buildSnapshots } from "./stats";
 import { renderBankrollChart }       from "./chart";
 import { exportToCsv }               from "./export";
+import { initBacktest }              from "./backtest-ui";
 import type { BetInputs, KellyResult, SavedBet } from "./types";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
@@ -115,10 +116,12 @@ function renderBankroll(): void {
 
 function renderStats(): void {
   const bets  = loadBets();
-  const stats = calcStats(bets);
 
   // Back-calculate starting bankroll from current bankroll minus all P&L
-  const startingBankroll = loadBankroll() - stats.totalPnl;
+  const resolvedPnl      = bets.filter((b) => b.status !== "active")
+                               .reduce((sum, b) => sum + (b.pnl ?? 0), 0);
+  const startingBankroll = loadBankroll() - resolvedPnl;
+  const stats = calcStats(bets, startingBankroll);
   const snapshots        = buildSnapshots(bets, startingBankroll);
 
   // Win Rate
@@ -360,3 +363,4 @@ resetBankrollBtn.addEventListener("click", () => {
 renderBankroll();
 renderStats();
 renderHistory();
+initBacktest();
