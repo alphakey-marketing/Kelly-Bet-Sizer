@@ -1,3 +1,5 @@
+// artifacts/vanilla-betting-mvp/src/types.ts
+
 export interface BetInputs {
   bankroll: number;
   winProbability: number;
@@ -15,4 +17,8 @@ export interface SavedBet extends BetInputs {
   id: string;
   savedAt: string;
   result: KellyResult;
+  // ── Phase 1 additions ──────────────────────────
+  status: "active" | "won" | "lost";
+  resolvedAt?: string;
+  pnl?: number;           // profit (positive) or loss (negative)
 }

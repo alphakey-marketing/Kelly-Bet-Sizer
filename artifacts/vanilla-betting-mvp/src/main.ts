@@ -1,22 +1,34 @@
+// artifacts/vanilla-betting-mvp/src/main.ts
+
 import { halfKelly } from "./kelly";
-import { loadBets, saveBet, clearBets } from "./storage";
+import {
+  loadBets,
+  saveBet,
+  clearBets,
+  resolveBet,
+  loadBankroll,
+  resetBankroll,
+} from "./storage";
 import type { BetInputs, KellyResult, SavedBet } from "./types";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 
-const bankrollEl   = document.getElementById("bankroll")       as HTMLInputElement;
-const winProbEl    = document.getElementById("winProb")        as HTMLInputElement;
-const oddsEl       = document.getElementById("odds")           as HTMLInputElement;
-const betNameEl    = document.getElementById("betName")        as HTMLInputElement;
-const calcBtn      = document.getElementById("calcBtn")        as HTMLButtonElement;
-const saveBtn      = document.getElementById("saveBtn")        as HTMLButtonElement;
-const clearBtn     = document.getElementById("clearBtn")       as HTMLButtonElement;
-const errorMsg     = document.getElementById("errorMsg")       as HTMLParagraphElement;
-const resultBox    = document.getElementById("result")         as HTMLDivElement;
-const resultAmount = document.getElementById("resultAmount")   as HTMLParagraphElement;
-const resultFrac   = document.getElementById("resultFraction") as HTMLParagraphElement;
-const historyList  = document.getElementById("historyList")    as HTMLUListElement;
-const emptyMsg     = document.getElementById("emptyMsg")       as HTMLParagraphElement;
+const bankrollEl        = document.getElementById("bankroll")        as HTMLInputElement;
+const winProbEl         = document.getElementById("winProb")         as HTMLInputElement;
+const oddsEl            = document.getElementById("odds")            as HTMLInputElement;
+const betNameEl         = document.getElementById("betName")         as HTMLInputElement;
+const calcBtn           = document.getElementById("calcBtn")         as HTMLButtonElement;
+const saveBtn           = document.getElementById("saveBtn")         as HTMLButtonElement;
+const clearBtn          = document.getElementById("clearBtn")        as HTMLButtonElement;
+const errorMsg          = document.getElementById("errorMsg")        as HTMLParagraphElement;
+const resultBox         = document.getElementById("result")          as HTMLDivElement;
+const resultAmount      = document.getElementById("resultAmount")    as HTMLParagraphElement;
+const resultFrac        = document.getElementById("resultFraction")  as HTMLParagraphElement;
+const historyList       = document.getElementById("historyList")     as HTMLUListElement;
+const emptyMsg          = document.getElementById("emptyMsg")        as HTMLParagraphElement;
+const bankrollDisplay   = document.getElementById("bankrollDisplay") as HTMLParagraphElement;
+const resetBankrollBtn  = document.getElementById("resetBankrollBtn")as HTMLButtonElement;
+const resetBankrollInput= document.getElementById("resetBankrollInput") as HTMLInputElement;
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -27,7 +39,6 @@ let lastInputs: BetInputs  | null = null;
 
 function validate(): BetInputs | null {
   const bankroll       = parseFloat(bankrollEl.value);
-  // FIX 2a: user enters 0–100 (%), divide by 100 to get decimal for Kelly
   const winProbability = parseFloat(winProbEl.value) / 100;
   const decimalOdds    = parseFloat(oddsEl.value);
   const label          = betNameEl.value.trim() || undefined;
@@ -36,8 +47,9 @@ function validate(): BetInputs | null {
     showError("Bankroll must be a positive number.");
     return null;
   }
-  // FIX 2b: validate against 0–100 range, not 0–1
-  if (!isFinite(parseFloat(winProbEl.value)) || parseFloat(winProbEl.value) <= 0 || parseFloat(winProbEl.value) >= 100) {
+  if (!isFinite(parseFloat(winProbEl.value)) ||
+      parseFloat(winProbEl.value) <= 0 ||
+      parseFloat(winProbEl.value) >= 100) {
     showError("Win probability must be between 0 and 100 (e.g. enter 60 for 60%).");
     return null;
   }
@@ -63,7 +75,6 @@ function clearError(): void {
   errorMsg.classList.add("hidden");
 }
 
-// FIX 2c: Changed from USD to HKD
 function fmt$(n: number): string {
   return "HKD " + n.toLocaleString("en-HK", {
     minimumFractionDigits: 2,
@@ -82,6 +93,13 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// ── Bankroll Display ───────────────────────────────────────────────────────────
+
+function renderBankroll(): void {
+  const current = loadBankroll();
+  bankrollDisplay.textContent = fmt$(current);
 }
 
 // ── Calculate ──────────────────────────────────────────────────────────────────
@@ -114,12 +132,26 @@ function save(): void {
     return;
   }
   const bet: SavedBet = {
-    id:      crypto.randomUUID(),
-    savedAt: new Date().toISOString(),
+    id:        crypto.randomUUID(),
+    savedAt:   new Date().toISOString(),
+    status:    "active",              // ← Phase 1: default status
     ...lastInputs,
-    result:  lastResult,
+    result:    lastResult,
   };
   saveBet(bet);
+  renderHistory();
+}
+
+// ── Resolve: Win / Lose ────────────────────────────────────────────────────────
+
+function handleResolve(e: Event): void {
+  const btn    = e.currentTarget as HTMLButtonElement;
+  const id     = btn.dataset["id"]!;
+  const outcome = btn.dataset["outcome"] as "won" | "lost";
+
+  const newBankroll = resolveBet(id, outcome);
+
+  bankrollDisplay.textContent = fmt$(newBankroll);
   renderHistory();
 }
 
@@ -142,37 +174,94 @@ function renderHistory(): void {
       "rounded-xl bg-gray-900 border border-gray-800 px-4 py-3 " +
       "flex items-start justify-between gap-4";
 
-    const date  = new Date(bet.savedAt).toLocaleString();
-    const label = bet.label ?? "Unnamed bet";
+    const date    = new Date(bet.savedAt).toLocaleString();
+    const label   = bet.label ?? "Unnamed bet";
+    const isActive = bet.status === "active";
 
-    // FIX 2d: display winProbability as % (multiply back by 100 for readability)
+    // Status badge
+    const badge = isActive
+      ? `<span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">Active</span>`
+      : bet.status === "won"
+      ? `<span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">✅ Won</span>`
+      : `<span class="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">❌ Lost</span>`;
+
+    // P&L display (only for resolved bets)
+    const pnlHtml = !isActive && bet.pnl !== undefined
+      ? `<p class="text-xs mt-1 font-semibold ${bet.pnl >= 0 ? "text-green-400" : "text-red-400"}">
+           P&L: ${bet.pnl >= 0 ? "+" : ""}${fmt$(bet.pnl)}
+         </p>`
+      : "";
+
+    // Win/Lose buttons (only for active bets)
+    const actionHtml = isActive
+      ? `<div class="flex flex-col gap-1 shrink-0">
+           <button
+             data-id="${bet.id}"
+             data-outcome="won"
+             class="resolve-btn text-xs bg-green-500/20 text-green-400 hover:bg-green-500/40 px-3 py-1 rounded transition-colors">
+             💚 Win
+           </button>
+           <button
+             data-id="${bet.id}"
+             data-outcome="lost"
+             class="resolve-btn text-xs bg-red-500/20 text-red-400 hover:bg-red-500/40 px-3 py-1 rounded transition-colors">
+             ❤️ Lose
+           </button>
+         </div>`
+      : `<div class="text-right shrink-0">
+           <p class="text-xs text-gray-500">${new Date(bet.resolvedAt!).toLocaleString()}</p>
+         </div>`;
+
     li.innerHTML = `
-      <div class="min-w-0">
-        <p class="text-sm font-medium text-white truncate">${escapeHtml(label)}</p>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-medium text-white truncate">${escapeHtml(label)}</p>
+          ${badge}
+        </div>
         <p class="text-xs text-gray-400 mt-0.5">${date}</p>
         <p class="text-xs text-gray-500 mt-1">
           Bankroll: ${fmt$(bet.bankroll)} · p=${(bet.winProbability * 100).toFixed(1)}% · odds=${bet.decimalOdds}
         </p>
+        ${pnlHtml}
       </div>
-      <div class="text-right shrink-0">
+      <div class="flex flex-col items-end gap-1 shrink-0">
         <p class="text-sm font-bold text-indigo-300">${fmt$(bet.result.recommendedBetAmount)}</p>
         <p class="text-xs text-gray-500">${fmtPct(bet.result.halfKellyFraction)}</p>
+        ${actionHtml}
       </div>
     `;
 
     historyList.appendChild(li);
   }
+
+  // Attach resolve button listeners
+  document.querySelectorAll<HTMLButtonElement>(".resolve-btn").forEach((btn) => {
+    btn.addEventListener("click", handleResolve);
+  });
 }
 
-// ── Event listeners ────────────────────────────────────────────────────────────
+// ── Event Listeners ────────────────────────────────────────────────────────────
 
 calcBtn.addEventListener("click", calculate);
 saveBtn.addEventListener("click", save);
+
 clearBtn.addEventListener("click", () => {
+  if (!confirm("Clear ALL bet history? This cannot be undone.")) return;
   clearBets();
   lastResult = null;
   lastInputs = null;
   renderHistory();
+});
+
+resetBankrollBtn.addEventListener("click", () => {
+  const amount = parseFloat(resetBankrollInput.value);
+  if (!isFinite(amount) || amount <= 0) {
+    showError("Enter a valid bankroll amount to reset.");
+    return;
+  }
+  resetBankroll(amount);
+  renderBankroll();
+  resetBankrollInput.value = "";
 });
 
 [bankrollEl, winProbEl, oddsEl, betNameEl].forEach((el) => {
@@ -183,4 +272,5 @@ clearBtn.addEventListener("click", () => {
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
+renderBankroll();
 renderHistory();
