@@ -138,6 +138,38 @@ function renderResults(result: BacktestResult): void {
         </div>`).join("");
 }
 
+// ── Sample CSV generator ───────────────────────────────────────────────────────
+
+function generateSampleCsv(): string {
+  const header = "Date,HomeTeam,AwayTeam,FTR,B365H,B365D,B365A,PSH,PSD,PSA";
+
+  // 20 realistic-looking rows with deliberate edge on some bets
+  const rows = [
+    "01/08/2023,Arsenal,Chelsea,H,2.10,3.40,3.60,2.15,3.45,3.70",
+    "01/08/2023,Man City,Liverpool,D,1.75,3.80,4.50,1.78,3.85,4.60",
+    "05/08/2023,Tottenham,Newcastle,A,2.20,3.30,3.40,2.25,3.35,3.45",
+    "05/08/2023,Brighton,Everton,H,1.95,3.50,4.00,2.00,3.55,4.10",
+    "12/08/2023,Wolves,Aston Villa,D,2.80,3.20,2.60,2.85,3.25,2.65",
+    "12/08/2023,West Ham,Brentford,H,2.05,3.40,3.70,2.10,3.45,3.75",
+    "19/08/2023,Leicester,Burnley,H,1.80,3.60,4.50,1.85,3.65,4.55",
+    "19/08/2023,Fulham,Crystal Palace,A,2.40,3.25,3.10,2.45,3.30,3.15",
+    "26/08/2023,Chelsea,Arsenal,H,2.30,3.35,3.20,2.35,3.40,3.25",
+    "26/08/2023,Liverpool,Man City,H,2.60,3.40,2.80,2.65,3.45,2.85",
+    "02/09/2023,Newcastle,Tottenham,H,2.15,3.30,3.55,2.20,3.35,3.60",
+    "02/09/2023,Everton,Brighton,A,3.20,3.10,2.30,3.25,3.15,2.35",
+    "16/09/2023,Aston Villa,Wolves,H,1.90,3.50,4.20,1.95,3.55,4.25",
+    "16/09/2023,Brentford,West Ham,D,2.70,3.20,2.70,2.75,3.25,2.75",
+    "23/09/2023,Burnley,Leicester,A,3.40,3.20,2.10,3.45,3.25,2.15",
+    "23/09/2023,Crystal Palace,Fulham,H,2.50,3.20,3.00,2.55,3.25,3.05",
+    "30/09/2023,Arsenal,Man City,D,3.10,3.30,2.40,3.15,3.35,2.45",
+    "30/09/2023,Liverpool,Tottenham,H,1.65,3.90,5.50,1.68,3.95,5.60",
+    "07/10/2023,Chelsea,Brighton,H,2.00,3.45,3.90,2.05,3.50,3.95",
+    "07/10/2023,Man City,Newcastle,H,1.55,4.00,6.50,1.58,4.05,6.60",
+  ];
+
+  return [header, ...rows].join("\n");
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 export function initBacktest(): void {
@@ -259,6 +291,19 @@ export function initBacktest(): void {
       runBtn.textContent = "Run Backtest";
     };
     reader.readAsText(file);
+  });
+
+  // ── Sample CSV download ────────────────────────────────────────────────────
+  const sampleBtn = $("btSampleBtn") as HTMLButtonElement;
+  sampleBtn.addEventListener("click", () => {
+    const csv  = generateSampleCsv();
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = "kelly-backtest-sample.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   });
 }
 
